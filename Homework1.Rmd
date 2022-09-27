@@ -13,6 +13,7 @@ h1.title {
 </style>
 
 ```{r setup, include=FALSE}
+# Required libraries
 library(tidyverse)
 library(readr)
 ```
@@ -34,6 +35,7 @@ Linear regression is an appropriate tool because we have two continuous variable
 #### 2. Read in the data set, and call the tibble "wind". Print a summary of the data and make sure the data makes sense. 
 
 ```{r}
+# Reading in data
 wind <- read_table("Windmill.txt")
 summary(wind)
 ```
@@ -49,6 +51,8 @@ The explanatory variable is the wind speed at a reference site.
 #### 5. Create a scatterplot of the data with variables on the appropriate axes. Make the plot square. Add descriptive axis labels with appropriate units. Save the plot to a variable and print the plot.
 
 ```{r, fig.align='center'}
+
+# Creating scatter plot
 wind_base_plot = ggplot(data = wind) +
   geom_point(mapping = aes(x = RSpd, y = CSpd)) +
   theme(aspect.ratio = 1) +
@@ -65,6 +69,7 @@ We see that there is a positive correlation between RSpd and CSpd, meaning as RS
 #### 7. Calculate the correlation coefficient for the two variables (you may use a built-in R function). Print the result.
 
 ```{r}
+# Correlation coefficient
 cor(wind$RSpd, wind$CSpd)
 ```
 
@@ -83,6 +88,7 @@ The deterministic parts of the model are the beta parts of the equation, while t
 
 ```{r, fig.align='center'}
 wind_base_plot +
+  # adding OLS line to previously created scatter plot
   geom_smooth(mapping = aes(x=RSpd, y=CSpd),
               method = "lm",
               se = FALSE)
@@ -92,6 +98,7 @@ wind_base_plot +
 #### 11. (a) Apply linear regression to the data. (b) Print out a summary of the results from the `lm` function. (c) Save the residuals and fitted values to the `wind` tibble. (d) Print the first few rows of the `wind` tibble.
 
 ```{r}
+# Generating linear model
 model = lm(CSpd ~ RSpd, data = wind)
 summary(model)
 
@@ -111,7 +118,7 @@ $\hat{CSPD_i} = 3.141232 +$ $0.7557333RSPD_i$
 
 #### 14. Interpret the coefficient for the slope.
 
-The coefficient for the slope means that for every increase in one unit for RSpd, the CSpd increases by values of approximately .756
+The coefficient for the slope means that for every increase in one unit for RSpd, the average CSpd increases by values of approximately .756
 
 #### 15. Interpret the coefficient for the intercept.
 
@@ -144,6 +151,7 @@ head(design_matrix)
 #### 20. Obtain, and print, the parameter estimates for this data set (found above using `lm`) using matrix multiplication. You should use the following in your computations: t() [tranpose], solve() [inverse], %*% [matrix multiplicaiton].
 
 ```{r}
+
 (solve(t(design_matrix) %*% design_matrix)) %*% (t(design_matrix) %*% wind$CSpd)
 ```
 
