@@ -13,6 +13,8 @@ h1.title {
 </style>
 
 ```{r setup, include=FALSE}
+
+# Required libraries
 library(tidyverse)
 library(readr)
 library(ggfortify)
@@ -30,7 +32,7 @@ The Stopping Distance data set compares the **distance (column 2)** (in feet) re
 #### 1. Read in the data set, and call the tibble "stop". Print a summary of the data and make sure the data makes sense.
 
 ```{r}
-# <your code here>
+# Reading in data
 stop <- read_table("StoppingDistance.txt")
 
 summary(stop)
@@ -39,7 +41,7 @@ summary(stop)
 #### 2. Create a scatterplot of the data with variables on the appropriate axes (think about which variable makes the most sense to be the response). Make you plot look professional (make sure the axes labels are descriptive, the plot is square, etc.).
 
 ```{r, fig.align='center'}
-# <your code here>
+# Creating scatter plot 
 stop_plot <- ggplot(data = stop) +
   geom_point(mapping = aes(x = Speed, y = Distance)) +
   theme(aspect.ratio = 1) +
@@ -58,6 +60,7 @@ With a correlation of about .94, there is a strong linear relationship between s
 
 ```{r, fig.align='center'}
 stop_plot +
+  # Adding OLS line to scatter plot
   geom_smooth(mapping = aes(x = Speed, y = Distance),
               method = 'lm',
               se = FALSE)
@@ -67,7 +70,7 @@ stop_plot +
 #### 5. (a) Apply linear regression to the data(no transformations). (b) Print out a summary of the results from the `lm` function. (c) Save the residuals and fitted values to the `stop` tibble.
 
 ```{r}
-# <your code here>
+# Generating linear model
 model <- lm(Distance ~ Speed, data = stop)
 summary(model)
 
@@ -78,7 +81,7 @@ stop$Residuals <- model$residuals
 
 #### 6. Mathematically write out the fitted simple linear regression model for this data set using the coefficients you found above. Do not use "x" and "y" in your model - use variable names that are fairly descriptive, and do not use matrix notation.
 
-$\hat{Miles_i} = -20.13094 +$ $3.14138MPH_i$ 
+$\hat{Distance_i} = -20.13094 +$ $3.14138MPH_i$ 
 
 
 
@@ -88,7 +91,9 @@ $\hat{Miles_i} = -20.13094 +$ $3.14138MPH_i$
 
 ```{r, fig.align='center'}
 # <your code here>
+
 stop_plot
+# Residual vs fitted plot 
 res_vs_fitted <- autoplot(model, which = 1, ncol = 1, nrow = 1)
 res_vs_fitted
 
@@ -103,9 +108,10 @@ I believe the residuals are independent because the observations were done indiv
 #### 9. (N) The residuals are normally distributed and centered at zero (use at least three diagnostic tools)
 
 ```{r, fig.align='center'}
-# <your code here>
+# QQ plot
 q_q <- autoplot(model, which = 2, nrow = 1, ncol = 1)
 
+# Histogram
 stop_hist <- ggplot(data = stop) +
   geom_histogram(aes(x = Residuals, y = ..density..),
                  binwidth = 10) +
@@ -116,11 +122,12 @@ stop_hist <- ggplot(data = stop) +
                             sd = sd(stop$Residuals))) +
   theme(aspect.ratio = 1)
 
+# Box plot
 stop_box <- ggplot(data = stop) +
   geom_boxplot(aes(y = Residuals)) +
   theme(aspect.ratio = 1)
 
-
+# Printing out plots 
 q_q
 stop_hist
 stop_box
@@ -132,8 +139,10 @@ Based on the plots above, I feel comfortable with the assumption that residuals 
 #### 10. (E) The residuals have equal/constant variance across all values of X (use two diagnostic tools)
 
 ```{r, fig.align='center'}
-# <your code here>
+# Recalling residual vs fitted plot
 res_vs_fitted
+
+# Generating Brown-Forsythe test for homoscedastic variance
 grp <- as.factor(c(rep("lower", floor(dim(stop)[1] / 2)), 
                    rep("upper", ceiling(dim(stop)[1] / 2))))
 leveneTest(unlist(stop[order(stop$Speed), "Residuals"]) ~ grp, 
@@ -159,6 +168,7 @@ cook <- ggplot(data = stop) +
              linetype = "dashed") +
   theme(aspect.ratio = 1)
 
+# Table view of observations detected by Cook
 stop %>% 
   mutate(rowNum = row.names(stop)) %>%  # save original row numbers 
   filter(cooksd > 4 / length(cooksd)) %>%  # select potential outliers
@@ -178,6 +188,7 @@ dfbeta <- ggplot(data = stop) +
              linetype = "dashed") + 
   theme(aspect.ratio = 1)
 
+# Table view of observations detected by DFBETA
 stop %>% 
   mutate(rowNum = row.names(stop)) %>%  # save original row numbers 
   filter(abs(dfbetas_weight) > 2 / 
@@ -199,6 +210,7 @@ dffits <- ggplot(data = stop) +
              linetype = "dashed") +
   theme(aspect.ratio = 1)
 
+# Table view of observations detected by DFFIT
 stop %>% 
   mutate(rowNum = row.names(stop)) %>%  # save original row numbers 
   # select potential influential pts
@@ -206,6 +218,7 @@ stop %>%
                                   length(dffits))) %>%
   arrange(desc(abs(dffits)))
 
+# Visualising plots used to detect influential points, including box plot
 stop_box
 cook
 dfbeta
@@ -226,10 +239,14 @@ Based on all of the diagnostics, this simple linear regression model is not appr
 #### 14. Fix the model by making any necessary transformations. Justify the transformation you chose in words (why did you choose to transform just x, just y, or both?). (Note: if boxCox(mod) throws an error, replace mod with the formula for the linear model, y ~ x.) (Note: you will most likely need to repeat questions 14 and 18 until you are satisfied with the transformation you chose. Only then should you fill out this section - I only want to see the model you end up choosing, not all of your attempted models.)
 
 ```{r, fig.align='center'}
-bc <- boxCox(stop$Distance ~ stop$Speed)
-bc$x[which.max(bc$y)]
-stop$y_trans <- sqrt(stop$Distance)
 
+# Performing box cox transformation
+bc <- boxCox(stop$Distance ~ stop$Speed)
+bc$x[which.max(bc$y)] # Returns .42 value, suggests taking square root of Y
+
+stop$y_trans <- sqrt(stop$Distance) # Performing transformation on Y
+
+# Generating updated model with transformation
 updated_model <- lm(y_trans ~ Speed, data = stop)
 summary(updated_model)
 stop$Fitted_trans <- updated_model$fitted.values
@@ -244,7 +261,7 @@ Because of the violated assumptions, I determined a transformation was necessary
 #### 15. (L) Linearity (use at least two diagnostic tools)
 
 ```{r, fig.align='center'}
-# <your code here>
+# All plots from here on out are the same as above, just on transformed data
 trans_stop_plot <- ggplot(data = stop) +
   geom_point(mapping = aes(x = Speed, y = y_trans)) +
   theme(aspect.ratio = 1) +
@@ -375,7 +392,7 @@ After transformation, this model has no influential points on the data. There ar
 
 #### 19. Mathematically write out the fitted simple linear regression model for this data set using the coefficients you found above from your transformed model. Do not use "x" and "y" in your model - use variable names that are fairly descriptive, and do not use matrix notation.
 
-$\sqrt{\hat{Miles_i}} = 0.9323957 +$ $0.252466MPH_i$ 
+$\sqrt{\hat{Distance_i}} = 0.9323957 +$ $0.252466MPH_i$ 
 
 #### 20. Plot your new fitted *curve* on the scatterplot of the original data (on the original scale - not the transformed scale). Do you think this curve fits the data better than the line you previously fit?
 
