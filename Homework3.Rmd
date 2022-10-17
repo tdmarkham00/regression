@@ -1,0 +1,425 @@
+---
+title: "Homework 3"
+subtitle: <center> <h1>Simple Linear Regression Model Inference</h1> </center>
+author: <center> Tanner Markham<center>
+output: html_document
+---
+
+<style type="text/css">
+h1.title {
+  font-size: 40px;
+  text-align: center;
+}
+</style>
+
+```{r setup, include=FALSE}
+# Required packages
+library(tidyverse)
+library(readr)
+library(ggfortify)
+library(car)
+
+```
+
+## Data and Description
+
+Climate change has left California particularly vulnerable to severe drought conditions. One factor affecting water availability in Southern California is stream runoff from snowfall (FYI: water in Utah is also heavily reliant on snowpack). If runoff could be predicted, engineers, planners, and policy makers could do their jobs more effectively because they would have an estimate as to how much water is entering the area. 
+
+The Runoff Water data set compares the **stream runoff (column 2)** (in acre-feet) of a river near Bishop, California (due east of San Jose) with **snowfall (column 1)** (in inches) at a site in the Sierra Nevada mountains. The data set contains 43 years' worth of measurements. Download the water.txt file from Canvas, and put it in the same folder as this R Markdown file.
+
+#### 0. Replace the text "< PUT YOUR NAME HERE >" (above next to "author:") with your full name.
+
+#### 1. Read in the data set, and call the tibble "water". Print a summary of the data and make sure the data makes sense. 
+
+```{r}
+# Read in and summarize the data
+water <- read_table("water.txt")
+
+summary(water)
+```
+
+#### 2. Create (and print) a scatterplot of the data with variables on the appropriate axes. Make you plot look professional (make sure the plot is squre and the axes labels are descriptive). You should save your plot as an object to be used throughout the rest of the assignment.
+
+```{r, fig.align='center'}
+# Create scatter plot
+water_scatter <- ggplot(data = water) +
+  geom_point(mapping = aes(x = Precip, y = Runoff)) +
+  theme(aspect.ratio = 1) +
+  xlab('Snowfall (in inches)') +
+  ylab('Stream runoff (in acre-feet)')
+
+water_scatter
+```
+
+#### 3. Calculate (and print) the correlation coefficient. Use that and the scatterplot to briefly describe the relationship between Stream Runoff and Snowfall.
+
+```{r, fig.align='center'}
+# Correlation coefficient
+cor(water$Precip, water$Runoff)
+```
+
+With snowfall as the predictor and runoff as the outcome variable, there is a correlation of approximately .94. This indicates a strong correlation between runoff in acre-feet and snowfall in inches. If you look at the scatter plot, there does seem to be a positive linear trend. I do believe that there are some potential influential points that could be driving that correlation number up. 
+
+#### 4. Add the OLS regression line to the scatterplot you created in 2. Print the plot.
+
+```{r, fig.align='center'}
+water_scatter +
+  # Adding OLS line to scatter plot
+  geom_smooth(mapping = aes(x = Precip, y = Runoff),
+              method = 'lm',
+              se = FALSE)
+```
+
+#### 5. Fit a simple linear regression model to the data (no transformations), and save the residuals and fitted values to the `water` dataframe. Print a summary of the linear model.
+
+```{r}
+# Generating linear model
+water_model <- lm(Runoff ~ Precip, data = water)
+summary(water_model)
+
+water$Fitted <- water_model$fitted.values
+water$Residuals <- water_model$residuals
+```
+
+### Questions 6 to 11 involve using diagnostics to determine if the linear regression assumptions are met. For each assumption, (1) perform appropriate diagnostics to determine if the assumption is violated, and (2) explain whether or not you think the assumption is violated and why you think that. 
+
+#### 6. (L) $X$ vs $Y$ is linear (use at least two diagnostic tools)
+
+```{r, fig.align='center'}
+# Creating residual vs fitted plot
+res_vs_fitted <- autoplot(water_model, which = 1, ncol = 1, nrow = 1)
+
+# Viewing plots to check linearity assumption
+water_scatter
+res_vs_fitted
+```
+
+The linearity assumption is met. The deviance seen in the residual vs fitted plot is due to outlier influence and not by true non linearity.
+
+#### 7. (I) The residuals are independent (no diagnostic tools - just think about how the data was collected and briefly write your thoughts)
+
+I think that the data is independent. There isn't any obvious relationship between observations, so they don't affect each other in a way that would create any bias.
+
+#### 8. (N) The residuals are normally distributed and centered at zero (use at least three diagnostic tools)
+
+```{r, fig.align='center'}
+## Q-Q normality plot
+q_q <- autoplot(water_model, which = 2, nrow = 1, ncol = 1)
+
+# Histogram
+water_hist <- ggplot(data = water) +
+  geom_histogram(aes(x = Residuals, y = ..density..),
+                 binwidth = 6000) +
+  stat_function(fun = dnorm,
+                color = 'red',
+                size = 2,
+                args = list(mean = mean(water$Residuals),
+                            sd = sd(water$Residuals))) +
+  theme(aspect.ratio = 1)
+
+# Box plot
+water_box <- ggplot(data = water) +
+  geom_boxplot(aes(y = Residuals)) +
+  theme(aspect.ratio = 1)
+
+
+# Viewing plots for normality assumption
+q_q
+water_hist
+water_box
+
+
+```
+
+The residuals are not fully normally distributed in my opinion. The normal Q-Q plot has a lot of deviation from the center line at both ends. The histogram and the box plot show signs of normality, but I believe it could be better.
+
+#### 9. (E) The residuals have equal (constant) variance across all values of $X$ (homoscedastic) (use two diagnostic tools)
+
+```{r, fig.align='center'}
+# Callback to res vs fitted for constant variance
+res_vs_fitted
+
+# Performing Brown-Forsythe test
+grp <- as.factor(c(rep("lower", floor(dim(water)[1] / 2)), 
+                   rep("upper", ceiling(dim(water)[1] / 2))))
+leveneTest(unlist(water[order(water$Precip), "Residuals"]) ~ grp, 
+           center = median)
+```
+
+In this data set, I believe that the residuals are homescedastic. The distance between points on the residual vs fitted plot appear to be pretty constant across the board, and the brown-forsythe test did not return any significant results with a high p-value.
+
+#### 10. (A) The model describes all observations (i.e., there are no influential points) (use at least four diagnostic tools)
+
+```{r, fig.align='center'}
+# Cook's Distance
+water$cooksd <- cooks.distance(water_model)
+
+cook <- ggplot(data = water) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(water)), 
+                           y = cooksd)) +
+  ylab("Cook's Distance") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 4 / length(cooksd)),
+             color = "red", 
+             linetype = "dashed") +
+  theme(aspect.ratio = 1)
+
+# Table view of observations detected by Cook
+water %>% 
+  mutate(rowNum = row.names(water)) %>%  # save original row numbers 
+  filter(cooksd > 4 / length(cooksd)) %>%  # select potential outliers
+  arrange(desc(cooksd))
+
+
+# DFBETAS
+water$dfbetas_weight <- as.vector(dfbetas(water_model)[, 2])
+
+dfbeta <- ggplot(data = water) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(water)), 
+                           y = abs(dfbetas_weight))) +
+  ylab("Absolute Value of DFBETAS for Precipitation") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 2 / sqrt(length(dfbetas_weight))),
+             color = "red", 
+             linetype = "dashed") + 
+  theme(aspect.ratio = 1)
+
+# Table view of observations detected by DFBETA
+water %>% 
+  mutate(rowNum = row.names(water)) %>%  # save original row numbers 
+  filter(abs(dfbetas_weight) > 2 / 
+           sqrt(length(rownames(water)))) %>%  # select potential influential pts
+  arrange(desc(abs(dfbetas_weight)))
+
+
+# DFFITS
+water$dffits <- dffits(water_model)
+
+dffits <- ggplot(data = water) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(water)), 
+                           y = abs(dffits))) +
+  ylab("Absolute Value of DFFITS for Runoff") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 2 * sqrt(length(water_model$coefficients) /
+                                                   length(dffits))),
+             color = "red", 
+             linetype = "dashed") +
+  theme(aspect.ratio = 1)
+
+# Table view of observations detected by DFFITS
+water %>% 
+  mutate(rowNum = row.names(water)) %>%  # save original row numbers 
+  # select potential influential pts
+  filter(abs(dffits) > 2 * sqrt(length(water_model$coefficients) / 
+                                  length(dffits))) %>%
+  arrange(desc(abs(dffits)))
+
+# Viewing plots used to detect influential points, including box plot
+water_box
+cook
+dfbeta
+dffits
+```
+
+I think that there may be a couple of values that are too far past the threshold for influential points. The different plots above show that some of those values are showing up consistently in all the influential point tests.
+
+#### 11. (R) Additional predictor variables are not required (no diagnostic tools - just think about the variables you have and if there are other variables you think would help predict the response)
+
+I think that using snowfall as a predictor for water runoff is pretty good by itself, but there may be more weather related factors that could be helpful in creating a more accurate model. 
+
+
+### Based on your answers to questions 6 through 11, you may (or may not) have decided a transformation to the data is needed. This was, hopefully, good practice for assessing model assumptions. For simplicity for this assignment, we will use the orignial model (no transformations) for the rest of the questions. While this may be less satisifying, it will save you time.:)
+
+
+
+#### 12. Mathematically write out the fitted simple linear regression model for this data set using the coefficients you found above (do not use betas or matrix notation). Do not use "X" and "Y" in your model - use variable names that are fairly descriptive.
+
+$\hat{Runoff_i} = 27014.59 +$ $3752.486Snowfall_i$ 
+
+#### 13. Compute, print, *and interpret* a 95% confidence interval for the slope.
+
+```{r}
+# Generating 95% confidence interval for the slope
+confint(water_model,
+       parm="Precip",
+       level = 0.95)
+```
+
+We are 95% confident that the true value of the slope falls between 3316.809 and 4188.162. This means that we are 95% confident that the total runoff will increase between 3316.809 and 4188.162 acre-feet per increase in snowfall by one inch.
+
+#### 14. Based on the confidence interval, does an increase in snowfall *significantly* increase stream water? Why or why not?
+
+Based on this confidence interval, an increase in snowfall can significantly increase stream water. If there were no relationship between the two, the slope would have to be zero. Because zero is not included in this interval, a significant relationship can be inferred.
+
+#### 15. Print a summary of the linear model. Interpret the results from the hypothesis test output for the slope.
+
+```{r}
+# Summary for the water model to check for test statistic and respective p-value
+summary(water_model)
+```
+
+Based on the model summary, the test statistic for the slope coefficient is 17.394, which is very large. This is associated with a very small p-value that allows us to reject the null hypothesis that the slope is zero.
+
+#### 16. Briefly describe the difference between (1) a confidence interval for the slope, (2) a confidence interval for the mean of $Y$, and (3) a prediction interval for individual observations.
+
+A confidence interval for the slope is the estimated average amount of change in the response variable given a unit change in the predictor. A confidence interval for mean of Y is for the true average value of the response for all members of a population at a certain value of the predictor. The prediction interval is for the true value of the response for a new observation at a certain value of the predictor. Slope interval is used more to test the significance of the relationship between X and Y, while the other two are used for predictions. The mean of Y deals with average values, while the individual observation interval just deals with predicting singular value for another observation. This makes the individual observation interval much larger.
+
+#### 17. Compute, print, *and interpret* a 95% confidence interval for the average of $Y$ when $x_i=30$.
+
+```{r}
+# Confidence interval for average of Y when X_i is 30
+predict(water_model,
+        newdata = data.frame(Precip = 30),
+        level = 0.95,
+        interval = "confidence")
+```
+
+We are 95% confident that the average value of stream runoff when snowfall is 30 inches is between 131902.2 and 147276.1 acre-feet.
+
+#### 18. Create a confidence band for the average of $Y$ across all values of $X$, and overlay this band (using a distinct color) on your previous scatterplot that you created in 4. Print the plot.
+
+```{r}
+# Plotted confidence band
+
+# Sequence of snowfall values that we are interested in using to predict runoff 
+Precip_values <- seq(min(water$Precip), max(water$Precip), length = 100)
+
+# 95% confidence intervals of **runoff** across those values of snowfall
+conf_int_mean <- predict(water_model, 
+                    newdata = data.frame(Precip = Precip_values), 
+                    interval = "confidence",
+                    level = 0.95)
+
+conf_preds <- data.frame("Precip_values" = Precip_values, 
+                    conf_int_mean)
+
+# Adding bands to original scatter plot
+water_scatter + 
+  geom_line(data = conf_preds, 
+            mapping = aes(x = Precip_values, y = fit), 
+            color = "blue", size = 1.5) + 
+  # plot the fitted PI bands
+  geom_line(data = conf_preds, 
+            mapping = aes(x = Precip_values, y = lwr), # lower band
+            color = "#1b9e77", size = 1.5) +
+  geom_line(data = conf_preds,
+            mapping = aes(x = Precip_values, y = upr), #upper band
+            color = "#1b9e77", size = 1.5) 
+
+```
+
+#### 19. Briefly explain why the confidence band is shaped the way that it is.
+
+Because the confidence band is dependent on averages, we get much tighter intervals closer to the center of the data where we have more numbers to base the average off of. That's why it curves in more where the data is more clustered, and spaces out more where the data is more sparse.
+
+#### 20. Compute, print, *and interpret* a 95% prediction interval for $Y$ when $x_i=30$.
+
+```{r}
+# 95% prediction interval
+predict(water_model,
+        newdata = data.frame(Precip = 30),
+        level = 0.95,
+        interval = "prediction")
+```
+
+We are 95% confident that the water runoff for an observed river is between 11998.8 and 159179.5 acre-feet when snowfall is 30 inches.
+
+#### 21. Create a prediction band for $Y$ across all values of $X$, and overlay this band (using a distinct color) on your previous scatterplot that you created in 4. Print the plot.
+
+```{r}
+# Plotted prediction band
+
+# Sequence of snowfall values that we are interested in using to predict runoff 
+Precip_values <- seq(min(water$Precip), max(water$Precip), length = 100)
+
+# 95% prediction intervals of **runoff** across those values of snowfall
+pred_int <- predict(water_model, 
+                    newdata = data.frame(Precip = Precip_values), 
+                    interval = "prediction",
+                    level = 0.95)
+
+
+pred_preds <- data.frame("Precip_values" = Precip_values, 
+                    pred_int)
+
+# Plot the predictions
+water_scatter + 
+  geom_line(data = pred_preds, 
+            mapping = aes(x = Precip_values, y = fit), 
+            color = "blue", size = 1.5) + 
+  # plot the fitted PI bands
+  geom_line(data = pred_preds, 
+            mapping = aes(x = Precip_values, y = lwr), # lower band
+            color = "#1b9e77", size = 1.5) +
+  geom_line(data = pred_preds,
+            mapping = aes(x = Precip_values, y = upr), #upper band
+            color = "#1b9e77", size = 1.5)
+
+```
+
+#### 22. Briefly explain how/why the prediction band differs from the confidence band.
+
+The prediction band differs from the confidence band in the way that it's calculated. The prediction band add a 1 to essentially the same calculation, so it creates a larger standard error and therefore more variability. This is why the intervals are larger for prediction vs confidence.
+
+#### 23. What is the MSE (Mean Square Error) for the linear model you fit? Hint: you may refer to the ANOVA table results.
+
+```{r}
+# Mean square error
+anova <- aov(water_model)
+water_anova <- summary(anova)[[1]]
+water_anova
+MSE <- water_anova[2,3]
+MSE
+```
+
+#### 24. Briefly explain (1) what the MSE estimates and (2) a drawback to using it as a model evaluation metric.
+
+MSE is 79610011 acre-feet squared. The MSE estimates true error variance. It's a drawback because it's not a very interpretable number, and it's also vulnerable to outlier influence
+
+#### 25. Calculate the RMSE (Root Mean Square Error) for the linear model you fit. Print and interpret the result.
+
+```{r}
+range(water$Runoff)
+RMSE <- sqrt(MSE)
+RMSE
+
+```
+
+The RMSE takes the square root of MSE. It represents the average square root of the difference between the observed values and the fitted values, or in other words measures the spread of the residuals. It is more interpretable in the sense that you can say the lower the number, the better the model. The range for runoff in this data is between 41785 and 146345. That in mind, an RMSE of just under 9000 acre-feet is pretty small.
+
+#### 26. Calculate the MAE (Mean Absolute Error) for the linear model you fit (do not use a function from a random R package). Print and interpret the result.
+
+```{r}
+MAE <- sum(abs(water$Residuals)) / (nrow(water) - 2)
+MAE
+```
+The MAE is 6954.957 acre-feet. This represents the average absolute difference between the outcome and model prediction of the outcome. In other words, the average absolute difference between predicted values for runoff, and the actual runoff values is 6954.957 acre-feet, which isn't bad considering the large range of values defined in the previous question.
+
+
+#### 27. Briefly explain a benefit of using the MAE as a model evaluation metric over the RMSE.
+
+Benefits of using MAE over RMSE are the fact that MAE is more interpretable and less influenced by outliers.
+
+#### 28. Print a summary of the linear model. Briefly interpret the R-Squared (Coefficient of Determination) value.
+
+```{r}
+summary(water_model)
+```
+
+For this model, the R-squared value is .8807. This represents the proportion of variation in Y that's explained by predictor X. In this case, the variation in runoff that's explained by snowfall. This means that 88% of variation in runoff can be attributed to snowfall which is good because the higher the R-squared, the better.
+
+#### 29. Breifly interpret the Adjusted R-Squared (shown in the summary output above).
+
+The Adjusted R-squared value is .8778. It represents essentially the same thing as the R-squared value, but this version is adjusted based on how many predictor values you have. In this case, there is only one predictor variable so the R-sauared number isn't adjusted that much and therefore not that different than the unadjusted R-square value. 
+
+#### 30. Look at the F-Statistic and corresponding $p$-value from the summary of the linear model (output shown above). Do these values indicate that $X$ has a statistically significant linear association with $Y$?
+
+The F-statistic for this model is 302.6, and the corresponding p-value very small at 2.2e-16. This tests the null hypothesis that predictor variable has no linear relationship with the response variable. As the F-statistic gets further from one, the p-value gets lower and there is more evidence to reject the null hypothesis. For this case, the high F-statistic and low p-value help us reject the null hypothesis and provide evidence that there is a linear association between snowfall and runoff.
+
+#### 31. Briefly summarize what you learned, personally, from this analysis about the statistics, model fitting process, etc.
+
+I've learned that models are subject to quite a bit of variability in terms of how they can be interpreted. There are a lot of different metrics that can describe the effectiveness of the model, but some metrics are better than others. I've also learned more about the process of confidence intervals for regression and how different intervals tell us different things. 
+
+#### 32. Briefly summarize what you learned from this analysis *to a non-statistician*. Write a few sentences about (1) the purpose of this data set and analysis and (2) what you learned about this data set from your analysis. Write your response as if you were addressing a business manager (avoid using statistics jargon) and just provide the main take-aways.
+
+Using this data, we would like to analyze the relationship between snowfall in inches and water runoff in acre-feet in order to determine how effective snowfall is in predicting runoff. After checking assumptions and evaluating the model using different metrics, we can confirm that there is a linear relationship between snowfall and runoff. The average runoff increases by approximately 3752.5 acre-feet per increase in snowfall by one inch. Furthermore, we can be 95% confident that the true increase in runoff is between 3316.809 and 4188.162 acre-feet per one inch increase in snowfall.
