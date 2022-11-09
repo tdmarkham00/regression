@@ -1,0 +1,379 @@
+---
+title: "Homework 5"
+subtitle: <center> <h1>Multiple Linear Regression Variable Selection Methods</h1> </center>
+author: <center> Tanner Markham <center>
+output: html_document
+---
+
+<style type="text/css">
+h1.title {
+font-size: 40px;
+text-align: center;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(corrplot)  # colored correlation matrix
+library(ggfortify)  # plot glmnet objects using ggplot instead of base R
+library(car)  # needed for VIFs
+library(bestglm)  # for stepwise methods
+library(glmnet)  # for ridge, lasso, and elastic net
+set.seed(12345)
+```
+
+## Data and Description
+
+**For this assignment, we are revisiting the data set used in Homework 4. I think it would be very beneficial for you to review your Homework 4 before starting this one.**
+
+Measuring body fat is not simple. One method requires submerging the body underwater in a tank and measuring the increase in water level. A simpler method for estimating body fat would be preferred. In order to develop such a method, researchers recorded age (years), weight (pounds), height (inches), and three body circumference measurements (around the neck, chest, and abdominal (all in centimeters)) for 252 men. Each mans' percentage of body fat was accurately estimated by an underwater weighing technique (the variable brozek is the percentage of body fat). The hope is to be able to use this data to create a model that will accurately predict body fat percentage, by using just the basic variables recorded, without having to use the tank submerging method. 
+
+The data can be found in the BodyFat data set on Canvas. Download BodyFat.txt, and put it in the same folder as this R Markdown file.
+
+#### 0. Replace the text "< PUT YOUR NAME HERE >" (above next to "author:") with your full name.
+
+#### 0b. Make sure to set your seed since some of the functions randomly split your data (use `set.seed` in the setup code chunk above)!
+
+#### 1. Read in the data set, and call the data frame "bodyfat_orig". Print a summary of the data and make sure the data makes sense. **Remove the "row" column (which contains row numbers) from the data set.** Make sute the class of "bodyfat_orig" is a *data.frame only*.
+
+```{r}
+# Reading data
+bodyfat_orig <- read_table("BodyFat.txt")
+bodyfat_orig <- bodyfat_orig %>% 
+  select(!row)
+
+bodyfat_orig <- as.data.frame(bodyfat_orig)
+
+summary(bodyfat_orig)
+```
+
+#### 2. Refer back to your Homework 4. In that assignment, you fit this multiple linear regression model: for each of the multiple linear regression assumptions listed below, state if they were met or not met.
+
+1. The X’s vs Y are linear: Met
+2. The residuals are normally distributed and centered at zero: Met
+3. The residuals are homoscedastic: Not met
+4. The model describes all observations (i.e., there are no influential points): Not met
+5. No multicollinearity: Not met
+
+#### 3. There is one clear influential point in the data set. Create a new variable called "bodyfat" that contains the bodyfat_orig data set with the influential point removed. Use the bodyfat data set (not the bodyfat_orig data set) throughout the rest of the assignment.
+
+```{r, fig.align='center'}
+bodyfat <- bodyfat_orig %>% 
+  filter(brozek != 33.8) # the outlier is the only observation with brozek as 33.8
+```
+
+### You should have discovered, from Homework 4, that there is a multicollinearity problem. The goal of this assignment is to continue this analysis by identifying variables to potentially remove from the model to resolve the multicollinearity issues. 
+
+#### 4. Briefly explain why multicollinearity is a problem for multiple linear regression by identifying two consequences of multicollinearity.
+
+In cases where variables are perfect linear combinations, $\hat{\beta}$ cannot be computed because X'X is singular. Even when variables are not perfect linear combinations, there are still issues such as inflated standard errors, difficulty detecting significance, and wrong signs on coefficient estimates.
+
+#### 5. Briefly explain the similarities and differences between the following methods: best subset, forward, backward, and sequential replacement. Do not just copy the algorithm from the class notes - use your own words to explain what these methods are doing.
+
+All of these methods are variable selection methods, meaning that they attempt to select the best combination of variables for the model. Best subset is a little bit different from the rest, in that it calculates all possible combinations of variables and picks the best one based on whichever evaluation criteria you are using. Best subset is the ideal method if it's possible. The other three are a bit more closely related. Forward selection starts you off with only the most correlated predictor to the response. You then add predictors one by one based on their partial correlation until adding predictors no longer improves the model. This method is not good in practice. Backward is similar but 'backwards'. You start with p-1 predictors and essentially remove predictors one by one until the model no longer gets improved. For sequential replacement, you add a bit of both forward and backward selection. Starting with an intercept only model, you add a predictor and see if it helps. If it doesn't, you take it out and add a different predictor and so on. If a predictor helps, you then add another predictor and see if that helps. If it doesn't, you repeat the process and adding and removing predictors until the model stays the same.
+
+#### 6. Briefly explain how shrinkage methods work (variance-bias tradeoff).
+
+Shrinkage methods shrink the coefficients in the model towards zero. In OLS, the coefficients are unbiased but don't have the lowest variance due to inflation from multicollinearity. Shrinkage introduces bias to these coefficients as a way to lower the variance. This is the variance-bias tradeoff, where you can greatly reduce variance at the cost of a small increase in bias. This allows for getting around the multicollinearity problem.
+
+#### 7. Briefly explain the similarities/difference between ridge regression, LASSO, and elastic net.
+
+One big difference for ridge regression vs the other shrinkage methods is that it keeps all variables in the model. We can still address multicollinearity, but you might want to keep all predictors in the model. LASSO is a variable selection method that allows you to shrink estimates all the way to zero. It performs worse than ridge regression when there is high multicollinearity and also has more bias and a potential to miss out on variable effects. Elastic net is the best shrinkage method, overcoming any limitations from both ridge and LASSO methods.
+
+#### 8. Remember, when coding these methods, the response variable must be the last column in the data set for the `bestglm` function to work. Switch the order of the columns in the data set so that brozek is last.
+
+```{r, fig.align='center'}
+bodyfat <- bodyfat %>% 
+  relocate(brozek, .after = abdom)
+```
+
+#### 9. Apply the best subsets variable selection procedure to this data set. You may choose which metric you would like to use (ex: AIC, BIC, PMSE). Output a summary of the "best" model.
+
+```{r, fig.align='center'}
+best_subsets <- bestglm(bodyfat,
+                        IC = "CV",
+                        method = "exhaustive")
+
+#best glm uses last column in dataset as response variable
+
+# view variables included in the top 10 models
+#best_subsets$BestModels
+
+# view a summary of the "best" model
+summary(best_subsets$BestModel)
+
+```
+
+#### 10. Apply the forward selection procedure to this data set. You may choose which metric you would like to use (ex: AIC, BIC, PMSE). Output a summary of the "best" model.
+
+```{r, fig.align='center'}
+forward <- bestglm(bodyfat,
+                       IC = "CV",
+                       method = "forward")
+
+summary(forward$BestModel)
+```
+
+#### 11. Apply the backward selection procedure to this data set. You may choose which metric you would like to use (ex: AIC, BIC, PMSE). Output a summary of the "best" model.
+
+```{r, fig.align='center'}
+backward <- bestglm(bodyfat,
+                       IC = "CV",
+                       method = "backward")
+
+summary(backward$BestModel)
+```
+
+#### 12. Apply the sequential replacement selection procedure to this data set. You may choose which metric you would like to use (ex: AIC, BIC, PMSE). Output a summary of the "best" model.
+
+```{r, fig.align='center'}
+stepwise <- bestglm(bodyfat,
+                       IC = "CV",
+                       method = "seqrep")
+
+summary(stepwise$BestModel)
+```
+
+#### 13. Apply LASSO to this data set using the MSE metric. Output the coefficient values corresponding to the 1 standard error rule (do not output any plots).
+
+```{r, fig.align='center'}
+bodyfat_x <- as.matrix(bodyfat[, 1:6]) # predictor variables
+bodyfat_y <- bodyfat[, 7] # response variable
+
+# use cross validation to pick the "best" (based on MSE) lambda
+bodyfat_lasso_cv <- cv.glmnet(x = bodyfat_x,
+                              y = bodyfat_y, 
+                              type.measure = "mse", #pmse
+                              alpha = 1)  # 1 is code for "LASSO regression"
+
+# plot (log) lambda vs MSE
+autoplot(bodyfat_lasso_cv, label = FALSE) +
+  theme_bw() +
+  theme(aspect.ratio = 1)
+
+# lambda.min: value of lambda that gives minimum mean cross-validated error
+bodyfat_lasso_cv$lambda.min
+# lambda.1se: value of lambda within 1 standard error of the minimum 
+# cross-validated error
+bodyfat_lasso_cv$lambda.1se
+
+coef(bodyfat_lasso_cv, s = "lambda.min")
+coef(bodyfat_lasso_cv, s = "lambda.1se")
+```
+
+#### 14. Apply Elastic Net to this data set using the MSE metric. Output the coefficient values corresponding to the 1 standard error rule (do not output any plots).
+
+```{r, fig.align='center'}
+bodyfat_x <- as.matrix(bodyfat[, 1:6]) # predictor variables
+bodyfat_y <- bodyfat[, 7] # response variable
+
+# use cross validation to pick the "best" (based on MSE) lambda
+bodyfat_elastic_cv <- cv.glmnet(x = bodyfat_x,
+                                y = bodyfat_y, 
+                                type.measure = "mse", #pmse
+                                alpha = .5)  # .5 is code for "Elastic net regression"
+
+# plot (log) lambda vs MSE
+autoplot(bodyfat_elastic_cv, label = FALSE) +
+  theme_bw() +
+  theme(aspect.ratio = 1)
+
+# lambda.min: value of lambda that gives minimum mean cross-validated error
+bodyfat_elastic_cv$lambda.min
+# lambda.1se: value of lambda within 1 standard error of the minimum 
+# cross-validated error
+bodyfat_elastic_cv$lambda.1se
+
+coef(bodyfat_elastic_cv, s = "lambda.min")
+coef(bodyfat_elastic_cv, s = "lambda.1se")
+```  
+
+
+#### 15. Fill in the table below with "X"s (like the one at the end of the course notes: a row for each variable, a column for each variable selection method, an "X" in a cell means the variable was included for that variable selection method).
+
+Variable     | Best Subset | Forward | Backward | Sequential Replacement | LASSO  | Elastic Net
+------------ | ----------- | ------- | -------- | ---------------------- | ------ | -----------
+age          |             |         |          |                        |       X|            X
+weight       |            X|        X|          |                       X|        |
+height       |             |         |         X|                        |       X|            X
+neck         |             |         |         X|                        |       X|           
+chest        |             |         |          |                        |        |
+abdom        |            X|        X|         X|                       X|       X|            X
+
+
+
+#### 16. Now that you have seen the various results from the different methods, pick a subset of variables that you will include in the model. Which variables do you choose to include in the model? Why?
+
+Based on the information gathered from different versions of the potential model, I would decide to go with weight and abdom in my model. I compared best subset with elastic net and decided to go with the simpler best subset model
+
+#### 17. Create the multiple linear regression model with the variables you listed in the previous question (alternatively, you can call the best model using $BestModel). Print a summary of the results. Save the residuals from this model to the bodyfat dataframe.
+
+```{r, fig.align='center'}
+# Fitting model 
+bodyfat_lm <- lm(brozek ~ weight + abdom, data = bodyfat)
+summary(bodyfat_lm)
+
+
+bodyfat$residuals = bodyfat_lm$residuals
+bodyfat$fitted = bodyfat_lm$fitted.values
+
+```
+
+
+
+### Now that you have chosen a model, the next several questions ask you to check some of the model assumptions. For each assumption, (1) perform appropriate diagnostics to determine if the assumption is violated, and (2) explain whether or not you think the assumption is violated and why you think that. **Note: you can copy (then modify) a lot of your code from Homework 4 to answer these questions.**
+
+
+
+#### 18. (L) The Xs vs Y are linear (use the scatterplot matrix and the partial regression plots)
+
+```{r, fig.align='center'}
+# Correlation matrix
+pairs(bodyfat %>% select(brozek, weight, abdom))
+
+# Partial regression plot
+avPlots(bodyfat_lm)
+```
+
+I think that the model fits the linearity assumption. The scatterplots are clearly linear and the partial regression plots also show linearity.
+
+#### 19. (N) The residuals are normally distributed and centered at zero (use the boxplot and normal probability plot)
+
+```{r, fig.align='center'}
+# Boxplot
+bodyfat_box <- ggplot(data = bodyfat) +
+  geom_boxplot(aes(y = residuals)) +
+  theme(aspect.ratio = 1)
+
+bodyfat_box
+
+# Normal probability plot
+q_q <- autoplot(bodyfat_lm, which = 2, nrow = 1, ncol = 1)
+
+q_q
+```
+
+I believe that the residuals are normally distributed. Both the box plot and the normal probability plot show normality. The box plot is pretty much exactly centered at zero and looks normal, and the normal probability plot follows the diagonal line very closely with only small deviation at the tails.
+
+#### 20. (E) The residuals have equal/constant variance across all values of X (use the residuals vs. fitted values plot)
+
+```{r}
+# Residual Vs Fitted
+res_vs_fitted <- autoplot(bodyfat_lm, which = 1, ncol = 1, nrow = 1)
+res_vs_fitted
+```
+
+I don't believe that the equal/constant variance assumption is met. I think that the vertical distance between points shrinks at higher fitted values.
+
+#### 21. (A) The model describes all observations (i.e., there are no influential points) (use the DFBETAS and DFFITS)
+
+```{r, fig.align='center'}
+# DFBETAS
+
+# Weight
+bodyfat$dfbetas_weight <- as.vector(dfbetas(bodyfat_lm)[, 2])
+
+dfbeta_weight <- ggplot(data = bodyfat) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(bodyfat)), 
+                           y = abs(dfbetas_weight))) +
+  ylab("Absolute Value of DFBETAS for Weight") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 2 / sqrt(length(dfbetas_weight))),
+             color = "red", 
+             linetype = "dashed") + 
+  theme(aspect.ratio = 1)
+
+# Table view of observations detected by DFBETA
+bodyfat %>% 
+  mutate(rowNum = row.names(bodyfat)) %>%  # save original row numbers 
+  filter(abs(dfbetas_weight) > 2 / 
+           sqrt(length(rownames(bodyfat)))) %>%  # select potential influential pts
+  arrange(desc(abs(dfbetas_weight)))
+
+
+# Abdom
+bodyfat$dfbetas_abdom <- as.vector(dfbetas(bodyfat_lm)[, 3])
+
+dfbeta_abdom <- ggplot(data = bodyfat) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(bodyfat)), 
+                           y = abs(dfbetas_abdom))) +
+  ylab("Absolute Value of DFBETAS for Abdom") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 2 / sqrt(length(dfbetas_abdom))),
+             color = "red", 
+             linetype = "dashed") + 
+  theme(aspect.ratio = 1)
+
+# Table view of observations detected by DFBETA
+bodyfat %>% 
+  mutate(rowNum = row.names(bodyfat)) %>%  # save original row numbers 
+  filter(abs(dfbetas_abdom) > 2 / 
+           sqrt(length(rownames(bodyfat)))) %>%  # select potential influential pts
+  arrange(desc(abs(dfbetas_abdom)))
+
+
+ggarrange(dfbeta_weight, dfbeta_abdom, ncol = 2)
+
+# DFFITS
+bodyfat$dffits <- dffits(bodyfat_lm)
+
+dffits <- ggplot(data = bodyfat) + 
+  geom_point(mapping = aes(x = as.numeric(rownames(bodyfat)), 
+                           y = abs(dffits))) +
+  ylab("Absolute Value of DFFITS for Brozek") +
+  xlab("Observation Number") +
+  geom_hline(mapping = aes(yintercept = 2 * sqrt(length(bodyfat_lm$coefficients) /
+                                                   length(dffits))),
+             color = "red", 
+             linetype = "dashed") +
+  theme(aspect.ratio = 1)
+
+bodyfat %>% 
+  mutate(rowNum = row.names(bodyfat)) %>%  # save original row numbers 
+  # select potential influential pts
+  filter(abs(dffits) > 2 * sqrt(length(bodyfat_lm$coefficients) / 
+                                  length(dffits))) %>%
+  arrange(desc(abs(dffits)))
+
+dffits
+```
+
+I think that the observation at row 248 is a little bit iffy, but I would proceed under the assumption that the observations are met
+
+#### 22. No multicollinearity (use the scatterplot matrix, correlation matrix, and variance inflation factors)
+
+```{r, fig.align='center'}
+# Scatterplot matrix
+pairs(bodyfat %>% select(brozek, weight, abdom))
+
+# Correlation matrix
+bodyfat %>%
+  select(brozek, weight, abdom) %>% 
+  cor() %>% 
+  round(digits = 2) 
+
+# Plotting correlation matrix
+bodyfat %>% 
+  select(brozek, weight, abdom) %>% 
+  cor() %>% 
+  corrplot(type = 'upper')
+
+# Variance inflation factors 
+vif(bodyfat_lm)
+mean(vif(bodyfat_lm))
+```
+
+While there are still some indications of multicollinearity, the variance inflation factors are significantly lower than the full model. This level of multicollinearity is much more moderate and easier to manage.
+
+#### 23. Given the results from your model assumption checking, what would you do next to continue this analysis?
+
+Because there are some assumptions that aren't met or are pretty suspect, I would start considering transforming the data in order to fit a better model. I'd also look at potentially exploring the elastic net model if I decided that the multicollinearity was going to be a big problem.
+
+#### 24. Briefly summarize what you learned, personally, from this analysis about the statistics, model fitting process, etc.
+
+I've learned that sometimes the steps that we take to fix models don't always work perfectly. I assumed that using the best subsets selection method would fix multicollinearity in the data, but that wasn't necessarily true. There is no single perfect model, we just have to pick the most useful one.
+
+#### 25. Briefly summarize what you learned from this analysis *to a non-statistician*. Write a few sentences about (1) the purpose of this data set and analysis and (2) what you learned about this data set from your analysis. Write your response as if you were addressing a business manager (avoid using statistics jargon) and just provide the main take-aways.
+
+Using this data, we would like to analyze the relationship between brozek (body fat percentage) and various body measurements such as age, weight, height, neck, chest, and abdom. While performing diagnostic measures on the data, it was determined that a simpler model could be used to predict brozek, using just weight and abdom measurements.
