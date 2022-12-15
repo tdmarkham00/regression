@@ -1,4 +1,4 @@
-# Statistical Modeling: Linear, Logistic, and Poisson
+# Statistical Modeling: Linear, Logistic, and Poisson Regression
 This repository contains homework assignments for one my my statistical modeling classes covering linear, logistic, and poisson regression.
 
 ## Contents
